@@ -1,0 +1,39 @@
+{
+  "name": "insurance-claim-live-agent-team",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Insurance first-notice-of-loss intake agent on LiveKit Agents, OpenAI GPT-Live, and a Tavus avatar.",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build:web": "esbuild src/web/app.ts --bundle --format=esm --target=es2022 --sourcemap --outfile=public/app.js",
+    "build": "tsc -p tsconfig.json && npm run build:web",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "agent": "tsx src/agent.ts dev",
+    "agent:start": "tsx src/agent.ts start",
+    "web": "npm run build:web && tsx src/server.ts",
+    "dev": "npm run build:web && concurrently -n agent,web -c blue,green \"tsx src/agent.ts dev\" \"tsx src/server.ts\"",
+    "download-files": "tsx src/agent.ts download-files"
+  },
+  "dependencies": {
+    "@livekit/agents": "^1.9.1",
+    "@livekit/agents-plugin-openai": "^1.9.1",
+    "@livekit/agents-plugin-tavus": "^1.9.1",
+    "@livekit/rtc-node": "^1.1.0",
+    "dotenv": "^16.4.5",
+    "livekit-server-sdk": "^2.19.1",
+    "sharp": "0.35.4",
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "concurrently": "^9.0.0",
+    "esbuild": "^0.28.2",
+    "jszip": "^3.10.2",
+    "livekit-client": "^2.22.3",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+public/app.js
+public/app.js.map
+*.tsbuildinfo
+
+# Environment and secrets (keep .env.example tracked)
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editors and OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Python leftovers
+.venv/
+__pycache__/
+
+# Claude Code local settings
+.claude/settings.local.json

@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Insurance first-notice-of-loss intake agent on LiveKit Agents, OpenAI GPT-Live, and a Tavus avatar.",
+  "description": "Insurance first-notice-of-loss intake agent on LiveKit Agents, an OpenAI voice pipeline, and a Tavus avatar.",
   "engines": {
     "node": ">=20.0.0"
   },

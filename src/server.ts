@@ -14,9 +14,9 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { AccessToken, RoomAgentDispatch, RoomConfiguration } from 'livekit-server-sdk';
 
-const HOST = process.env.FNOL_WEB_HOST || '127.0.0.1';
-const PORT = Number(process.env.FNOL_WEB_PORT || 4177);
-const AGENT_NAME = process.env.FNOL_AGENT_NAME || 'insurance-claim-agent';
+const HOST = '127.0.0.1';
+const PORT = 4177;
+const AGENT_NAME = 'insurance-claim-agent';
 const PUBLIC_DIR = resolve(fileURLToPath(new URL('../public', import.meta.url)));
 
 const MIME: Record<string, string> = {
@@ -42,6 +42,7 @@ function missingConfig(): string[] {
   if (!url) missing.push('LIVEKIT_URL');
   if (!apiKey) missing.push('LIVEKIT_API_KEY');
   if (!apiSecret) missing.push('LIVEKIT_API_SECRET');
+  if (!process.env.OPENAI_API_KEY) missing.push('OPENAI_API_KEY');
   return missing;
 }
 
@@ -105,7 +106,6 @@ const server = createServer(async (req, res) => {
         ok: missing.length === 0,
         missing,
         agent_name: AGENT_NAME,
-        voice: process.env.OPENAI_API_KEY ? 'gpt-live' : 'livekit-inference-pipeline',
         avatar: Boolean(process.env.TAVUS_API_KEY),
       });
       return;

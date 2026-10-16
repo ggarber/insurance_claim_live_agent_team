@@ -75,6 +75,8 @@ type ClaimState = {
   transcript: Turn[];
   tool_activity: ToolEntry[];
   missing_blockers: string[];
+  required_facts?: Array<{ key: string; label: string; done: boolean; value: string }>;
+  open_questions?: string[];
   documents: Array<{ item: string; status: string; already_provided: boolean }>;
   evidence_photos: Photo[];
   evidence_manifest: Array<Record<string, unknown>>;
@@ -323,10 +325,24 @@ function renderStamp() {
   }
 }
 
+const DOCUMENT_STATUS_LABELS: Record<string, string> = {
+  received: 'captured',
+  available: 'claimant has it, not captured yet',
+  planned: 'claimant will get it',
+  missing: 'not available yet',
+  unknown: 'not discussed yet',
+};
+
 function renderNeeded() {
   const items: Array<{ text: string; cls: string }> = [];
-  for (const blocker of state.missing_blockers || []) items.push({ text: shortBlocker(blocker).replace(/\?$/, ''), cls: 'blocker' });
-  for (const doc of state.documents || []) items.push({ text: `${doc.item} — ${doc.status || 'unknown'}`, cls: doc.already_provided ? 'done' : '' });
+  for (const fact of state.required_facts || []) {
+    items.push({ text: fact.done ? `${fact.label}: ${fact.value}` : fact.label, cls: fact.done ? 'done' : 'blocker' });
+  }
+  for (const question of state.open_questions || []) items.push({ text: shortBlocker(question).replace(/\?$/, ''), cls: 'blocker' });
+  for (const doc of state.documents || []) {
+    const status = DOCUMENT_STATUS_LABELS[doc.status] || doc.status || 'not discussed yet';
+    items.push({ text: `${doc.item} — ${status}`, cls: doc.already_provided ? 'done' : '' });
+  }
   neededListEl.innerHTML = items.length
     ? items.map((item) => `<li class="${item.cls}"><span class="tick-box"></span><span>${escapeHtml(item.text)}</span></li>`).join('')
     : '<li class="empty">Nothing yet. The list fills in as the claim team reads the call.</li>';
@@ -634,6 +650,6 @@ fetch('/api/health')
       setStatus('Setup required', 'danger');
       appendSystem(`Missing ${health.missing.join(', ')} in .env. Add them and restart the web server and agent.`);
     }
-    modelLabel.textContent = `${health.voice === 'gpt-live' ? 'OpenAI GPT-Live' : 'LiveKit Inference voice'} · ${health.avatar ? 'Tavus avatar' : 'voice only'}`;
+    modelLabel.textContent = `OpenAI voice · ${health.avatar ? 'Tavus avatar' : 'voice only'}`;
   })
   .catch(() => setStatus('Backend unavailable', 'danger'));

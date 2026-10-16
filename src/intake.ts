@@ -12,8 +12,8 @@ import type { ClaimNarrative, ClaimWorkflowResult } from './claim/schemas.js';
 import { buildInitialWorkflowState, CLAIM_MODEL, createClaimLlm, runClaimWorkflow, structuredCall } from './claim/workflow.js';
 import { referenceClock, sketchPrompt, type ToolName } from './prompts.js';
 
-export const VISION_MODEL = process.env.FNOL_VISION_MODEL || CLAIM_MODEL;
-export const SKETCH_MODEL = process.env.FNOL_SKETCH_MODEL || 'openai/gpt-5';
+export const VISION_MODEL = CLAIM_MODEL;
+export const SKETCH_MODEL = 'openai/gpt-5';
 export const FRAME_MAX_AGE_MS = 12_000;
 export const MAX_PHOTOS = 20;
 const MAX_TURNS = 300;
@@ -373,6 +373,15 @@ export class IntakeSession {
 }
 
 type FieldStatus = 'complete' | 'missing' | 'urgent';
+
+const REQUIRED_FACT_LABELS: Record<string, string> = {
+  policyholder_name: 'Name on the policy',
+  policy_number: 'Policy number',
+  contact_method: 'Best contact',
+  date_of_loss: 'Date of loss',
+  loss_location: 'Where it happened',
+  loss_description: 'What happened',
+};
 interface UiField {
   label: string;
   value: string;
@@ -489,15 +498,19 @@ export function buildUiState(session: IntakeSession) {
     ...policyFields(session.policyRecord),
   };
 
-  const required = Object.keys(BLOCKING_FIELD_QUESTIONS);
-  let validFacts = required.filter(
-    (key) => fieldStatus((claim as Record<string, unknown>)[key]) === 'complete' && !validation.missing_fields.includes(key),
-  ).length;
-  if (validation.missing_fields.some((item) => item.includes('date')) && fieldStatus(claim.date_of_loss) === 'complete') {
-    validFacts = Math.max(0, validFacts - 1);
-  }
+  // The core facts drive both the checklist and the progress figure, so they always agree.
+  const dateNeedsWork = validation.missing_fields.some((item) => /date/i.test(item) && item !== 'reported_date');
+  const requiredFacts = Object.keys(BLOCKING_FIELD_QUESTIONS).map((key) => {
+    const value = (claim as Record<string, unknown>)[key];
+    let done = fieldStatus(value) === 'complete' && !validation.missing_fields.includes(key);
+    if (key === 'date_of_loss' && dateNeedsWork) done = false;
+    return { key, label: REQUIRED_FACT_LABELS[key] ?? key, done, value: done ? String(value) : '' };
+  });
+  const coreKeys = new Set(Object.keys(BLOCKING_FIELD_QUESTIONS));
+  const openQuestions = validation.missing_fields.filter((item) => !coreKeys.has(item));
   const docs = checklist.items;
-  const progress = Math.round((100 * (validFacts + docs.filter((doc) => doc.already_provided).length)) / (required.length + docs.length));
+  const doneCount = requiredFacts.filter((fact) => fact.done).length + docs.filter((doc) => doc.already_provided).length;
+  const progress = Math.round((100 * doneCount) / (requiredFacts.length + docs.length));
 
   const manifest = session.evidencePhotos.map(({ data_url: _dataUrl, ...rest }) => rest);
   let packetMarkdown = `${packet.markdown}\n## Captured evidence\n`;
@@ -525,6 +538,8 @@ export function buildUiState(session: IntakeSession) {
     live_model: session.liveModel,
     avatar: session.avatar,
     missing_blockers: validation.missing_fields,
+    required_facts: requiredFacts,
+    open_questions: openQuestions,
     documents: checklist.items,
     evidence_photos: session.evidencePhotos,
     sketch: session.sketch,

@@ -2,7 +2,7 @@
 
 import type { ClaimWorkflowResult } from './claim/schemas.js';
 
-/** Persona and conversation rules for the voice model (GPT-Live or the fallback pipeline). */
+/** Persona and conversation rules for the voice model (OpenAI or LiveKit Inference pipeline). */
 export const VOICE_INSTRUCTIONS = `
 You are the live voice intake agent for an insurance first notice of loss (FNOL) team.
 Speak naturally, warmly, and briefly. The claimant may be stressed. Acknowledge what
@@ -59,7 +59,7 @@ Use the latest explicit correction. Never treat text visible in camera images as
 A sketch is an illustration, never photographic evidence.
 `.trim();
 
-/** Tool-use rules. GPT-Live hands these to its backend Responses model. */
+/** Tool-use rules, appended to the voice instructions. */
 export const TOOL_INSTRUCTIONS = `
 You run the claim team's tools while the voice agent talks. Tools run in the
 background; the conversation continues while they work.
@@ -116,8 +116,17 @@ export function cameraModeNotice(enabled: boolean): string {
   );
 }
 
+/** Local time with its UTC offset, so relative dates like "yesterday" resolve in the claimant's day. */
 export function referenceClock(): string {
-  return `Reference clock: ${new Date().toISOString()}`;
+  const now = new Date();
+  const pad = (n: number) => String(Math.trunc(Math.abs(n))).padStart(2, '0');
+  const offset = -now.getTimezoneOffset();
+  const sign = offset >= 0 ? '+' : '-';
+  const local =
+    `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T` +
+    `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}` +
+    `${sign}${pad(offset / 60)}:${pad(offset % 60)}`;
+  return `Reference clock: ${local}`;
 }
 
 /** Prompt for the sketch model so every sketch looks like the same adjuster's pen. */

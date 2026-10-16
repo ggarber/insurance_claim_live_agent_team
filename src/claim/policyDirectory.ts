@@ -1,8 +1,8 @@
 /**
  * Mock policy directory used by the live voice agent's background policy lookup.
  *
- * This stands in for a carrier policy administration system. The records line up
- * with the demo prompts in examples.ts so a live call can verify the policy the
+ * This stands in for a carrier policy administration system. The records match
+ * the mock policies in the README so a live call can verify the policy the
  * claimant mentions while the conversation keeps going.
  */
 
@@ -48,7 +48,7 @@ export const POLICY_RECORDS: Record<string, PolicyRecord> = {
     notes: ['Sump pump and water backup endorsement is on file.'],
   }),
   AUTO123: record({
-    policy_number: 'AUTO-90210',
+    policy_number: 'AUTO-123',
     policyholder_name: 'Jordan Lee',
     policy_line: 'Personal auto',
     status: 'active',
@@ -126,9 +126,9 @@ const DIGIT_WORDS: Record<string, string> = {
 const SEPARATOR_WORDS = new Set(['dash', 'hyphen', 'minus', 'number', 'no', 'policy']);
 
 /**
- * Turn a spoken policy number into characters: "auto one two three four" becomes
- * "AUTO 1234" and "H oh double four seven two one" becomes "H 0 44721".
- * Text that already contains digits, like "AUTO-90210", passes through unchanged.
+ * Turn a spoken policy number into characters: "auto one two three" becomes
+ * "AUTO 123" and "double four seven two one" becomes "44721".
+ * Text that already contains digits, like "AUTO-123", passes through unchanged.
  */
 export function spokenPolicyNumber(value: string | null | undefined): string {
   const tokens = String(value ?? '')
@@ -163,7 +163,7 @@ export function normalizePolicyNumber(value: string | null | undefined): string 
   if (match && match[2]) {
     let prefix = match[1]!;
     const tail = match[2].replace(/O/g, '0');
-    // Keep the prefix's trailing O as a zero when the record uses one (H0-44721).
+    // Keep the prefix's trailing O as a zero when a record uses one, like H0-123.
     if (prefix.endsWith('O') && `${prefix.slice(0, -1)}0${tail}` in POLICY_RECORDS) {
       prefix = `${prefix.slice(0, -1)}0`;
     }

@@ -1,22 +1,36 @@
 # Insurance Claim Live Agent Team
 
-An insurance claim agent that talks, listens, looks at damage through your camera, and sketches the incident while the conversation continues. Built in TypeScript on [LiveKit Agents](https://docs.livekit.io/agents/), with OpenAI GPT-Live for full-duplex voice and a Tavus avatar for the face.
+An insurance claim agent that talks, listens, looks at damage through your camera, and sketches the incident while the conversation continues. Built in TypeScript on [LiveKit Agents](https://docs.livekit.io/agents/), using OpenAI for the voice and a Tavus avatar for the face.
 
 The agent records details in a field notebook, checks mock policy records, and asks for missing information. A background claim team applies intake rules and prepares a downloadable claim packet with notes, captured evidence, and illustrations for human review.
 
-![Notebook and evidence example](assets/insurance-claim-live-agent-team-notebook.png)
+This is a reimplementation of the [Insurance Claim Live Agent Team](https://github.com/Shubhamsaboo/awesome-llm-apps/tree/main/voice_ai_agents/insurance_claim_live_agent_team) from [awesome-llm-apps](https://github.com/Shubhamsaboo/awesome-llm-apps). The original is built in Python on Google ADK and Gemini Live. This version keeps the same claim workflow, rules, and notebook UI, and runs it on LiveKit Agents with a Tavus avatar instead.
+
+![Live call with the Tavus avatar, field notebook with a pinned evidence photo, transcript, and still-needed checklist](assets/screenshot.png)
+
+## Features
+
+* **Live conversation:** speak or type, with live captions and a running transcript.
+* **Avatar:** a Tavus avatar lip-syncs the agent's voice; without a Tavus key the call runs voice only.
+* **Camera evidence:** captured frames include captions and verification status.
+* **Incident sketches:** illustrations based on the claimant's description, updated after corrections.
+* **Claim notebook:** extracted facts, missing information, policy checks, and routing.
+* **Packet download:** ZIP with Markdown notes, an evidence manifest, captured photos, and sketches.
+* **Desktop layout:** call and camera on the left, notes in the middle, transcript and checklist on the right. Mobile stacks the sections.
 
 ## How it fits together
 
+![Architecture: browser, LiveKit room with the voice agent and Tavus avatar, background tools, and the claim team of LLM specialists and deterministic rules](assets/architecture.svg)
+
 | Piece | Runs on | Job |
 | --- | --- | --- |
-| Voice | OpenAI GPT-Live (`gpt-live-1`) | Listens and speaks at the same time, handles barge-in, calls tools through its backend Responses model |
+| Voice | OpenAI `gpt-live-transcribe` → `gpt-4.1-mini` → `tts-1` | Transcribes the claimant, decides replies and tool calls, speaks; LiveKit handles turn-taking and barge-in |
 | Face | Tavus avatar via `@livekit/agents-plugin-tavus` | Joins the room and lip-syncs the agent's audio |
 | Claim team | LiveKit Inference | Extracts facts, classifies the claim, verifies camera frames, draws sketches |
 | Rules | Local TypeScript | Validation, coverage and evidence gates, document checklist, fraud and safety routing, Markdown packet |
 | Browser | `livekit-client` | Mic, camera, avatar playback, transcript, notebook, packet ZIP |
 
-GPT-Live is not served through LiveKit Inference, so it needs its own `OPENAI_API_KEY`. Without that key the agent falls back to a speech-to-text, LLM, text-to-speech pipeline that runs entirely on LiveKit Inference.
+The voice pipeline needs an `OPENAI_API_KEY`.
 
 ## Setup
 
@@ -34,7 +48,7 @@ LIVEKIT_URL=wss://your-project.livekit.cloud
 LIVEKIT_API_KEY=...
 LIVEKIT_API_SECRET=...
 TAVUS_API_KEY=...
-OPENAI_API_KEY=...        # GPT-Live; leave empty to use the Inference voice pipeline
+OPENAI_API_KEY=...        # OpenAI voice pipeline
 ```
 
 Start the agent worker and the web UI together:
@@ -73,23 +87,15 @@ Restart after changing `.env`.
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Required | Room connection, token minting, and LiveKit Inference |
 | `TAVUS_API_KEY` | Empty | Tavus avatar; empty means voice only |
 | `TAVUS_FACE_ID`, `TAVUS_PAL_ID` | Tavus stock | Avatar appearance and PAL. A custom PAL must use `pipeline_mode` `echo` with LiveKit transport |
-| `OPENAI_API_KEY` | Empty | GPT-Live voice; empty selects the Inference voice pipeline |
-| `FNOL_VOICE_MODEL` | `gpt-live-1` | GPT-Live voice model |
-| `FNOL_VOICE` | `marin` | GPT-Live voice |
-| `FNOL_BACKEND_MODEL` | `gpt-5.6-luna` | GPT-Live backend model that decides tool calls |
-| `FNOL_CLAIM_MODEL` | `openai/gpt-5-mini` | Fact extraction and classification |
-| `FNOL_VISION_MODEL` | Claim model | Camera frame verification |
-| `FNOL_SKETCH_MODEL` | `openai/gpt-5` | Incident sketches, drawn as SVG |
-| `FNOL_FALLBACK_LLM` | `openai/gpt-4.1-mini` | Conversation model for the Inference voice pipeline |
-| `FNOL_STT_MODEL`, `FNOL_TTS_MODEL` | `deepgram/nova-3`, `cartesia/sonic-3` | Inference voice pipeline |
-| `FNOL_TTS_VOICE` | `9626c31c-bec5-4cca-baa8-f8ba9e84c8bc` | Cartesia voice ID; the default is Jacqueline, a female American voice |
-| `FNOL_AGENT_NAME` | `insurance-claim-agent` | Explicit dispatch name shared by the worker and token server |
-| `FNOL_AVATAR_MODEL_LABEL` | `Tavus Phoenix 4.5` | Avatar label shown in the UI |
-| `FNOL_WEB_HOST`, `FNOL_WEB_PORT` | `127.0.0.1`, `4177` | Web server bind address |
+| `OPENAI_API_KEY` | Required | OpenAI voice pipeline |
+
+### Custom avatar
+
+Without `TAVUS_FACE_ID` and `TAVUS_PAL_ID` the agent uses Tavus's stock avatar. To use your own, create a face (replica) and a PAL in the [Tavus dashboard](https://platform.tavus.io/) and set their IDs in `.env`. The PAL must use `pipeline_mode` `echo` with LiveKit transport, because LiveKit runs the conversation and Tavus only renders the face.
 
 ## Camera and sketch behavior
 
-GPT-Live does not take video input, so the voice model never claims to see the camera itself. When the claimant shows something, the agent calls the evidence tool. That tool grabs the newest frame from the claimant's LiveKit video track, has the vision model describe it independently, and reports back what is actually visible.
+The voice model does not take video input, so it never claims to see the camera itself. When the claimant shows something, the agent calls the evidence tool. That tool grabs the newest frame from the claimant's LiveKit video track, has the vision model describe it independently, and reports back what is actually visible.
 
 | Input | Behavior |
 | --- | --- |
@@ -112,7 +118,7 @@ GPT-Live does not take video input, so the voice model never claims to see the c
 
 Use this fictional example with the camera off:
 
-> I'm Maya Singh, policy H0-44721. Our basement flooded when the sump pump failed.
+> I'm Adam Singh, policy 44721. Our basement flooded when the sump pump failed.
 >
 > Nobody is hurt. Water entered by the stairs and spread across the carpet toward the boxes.
 
@@ -120,8 +126,8 @@ Use this fictional example with the camera off:
 
 | Policy | Policyholder | Type | Status |
 | --- | --- | --- | --- |
-| H0-44721 | Maya Singh | Homeowners | Active |
-| AUTO-90210 | Jordan Lee | Auto | Active |
+| 44721 | Adam Singh | Homeowners | Active |
+| AUTO-123 | Jordan Lee | Auto | Active |
 | RNT-3008 | Priya Shah | Renters | Active |
 | TRV-7711 | Alex Chen | Travel | Active |
 | MED-5520 | Sam Rivera | Medical reimbursement | Active |

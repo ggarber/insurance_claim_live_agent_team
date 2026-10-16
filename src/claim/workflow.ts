@@ -25,7 +25,7 @@ import {
   type ClaimWorkflowResult,
 } from './schemas.js';
 
-export const CLAIM_MODEL = process.env.FNOL_CLAIM_MODEL || 'openai/gpt-5-mini';
+export const CLAIM_MODEL = 'openai/gpt-5-mini';
 
 const NORMALIZER_INSTRUCTIONS = `
 You are the intake specialist for an AI Insurance Claim Intake Agent.
@@ -44,7 +44,7 @@ Record supporting claimant turn IDs in fact_sources. Agent suggestions alone are
 Extraction rules:
 - policyholder_name: claimant or policyholder name, otherwise "not specified".
 - policy_number: policy/member number written with letters and digits, never spelled-out words
-  ("auto nine oh two one oh" is AUTO-90210; "H zero four four seven two one" is H0-44721), otherwise "not specified".
+  ("auto one two three" is AUTO-123; "four four seven two one" is 44721), otherwise "not specified".
 - contact_method: phone, email, mailing address, or preferred channel, otherwise "not specified".
 - date_of_loss: one exact calendar date as YYYY-MM-DD. For an unresolved range, keep "not specified" and ask for clarification.
 - reported_date: date the user says they are reporting the claim, otherwise "not specified".

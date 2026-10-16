@@ -1,8 +1,7 @@
 /**
  * LiveKit agent worker: the live voice claim agent.
  *
- * Voice: OpenAI GPT-Live (full duplex) when OPENAI_API_KEY is set, otherwise a
- * speech-to-text, LLM, text-to-speech pipeline on LiveKit Inference.
+ * Voice: an OpenAI speech-to-text, LLM, text-to-speech pipeline (needs OPENAI_API_KEY).
  * Face: a Tavus avatar when TAVUS_API_KEY is set.
  * Claim team: background tools that run on LiveKit Inference and deterministic rules.
  */
@@ -38,21 +37,16 @@ import {
   VOICE_INSTRUCTIONS,
 } from './prompts.js';
 
-export const AGENT_NAME = process.env.FNOL_AGENT_NAME || 'insurance-claim-agent';
-const VOICE_MODEL = process.env.FNOL_VOICE_MODEL || 'gpt-live-1';
-const VOICE = process.env.FNOL_VOICE || 'marin';
-const BACKEND_MODEL = process.env.FNOL_BACKEND_MODEL || 'gpt-5.6-luna';
-const FALLBACK_LLM = process.env.FNOL_FALLBACK_LLM || 'openai/gpt-4.1-mini';
-const STT_MODEL = process.env.FNOL_STT_MODEL || 'deepgram/nova-3';
-const TTS_MODEL = process.env.FNOL_TTS_MODEL || 'cartesia/sonic-3';
-// Cartesia "Jacqueline": confident, young American adult female.
-const TTS_VOICE = process.env.FNOL_TTS_VOICE || '9626c31c-bec5-4cca-baa8-f8ba9e84c8bc';
-const AVATAR_MODEL_LABEL = process.env.FNOL_AVATAR_MODEL_LABEL || 'Tavus Phoenix 4.5';
+export const AGENT_NAME = 'insurance-claim-agent';
+// OpenAI pipeline: low-latency streaming transcription, a fast non-reasoning model, fast TTS.
+const STT_MODEL = 'gpt-live-transcribe';
+const LLM_MODEL = 'gpt-4.1-mini';
+const TTS_MODEL = 'tts-1';
+const VOICE = 'nova';
+const AVATAR_MODEL_LABEL = 'Tavus Phoenix 4.5';
 const FRAME_WIDTH = 512;
 const STATE_TOPIC = 'claim.state';
 const EVENT_TOPIC = 'claim.event';
-
-const useGptLive = () => Boolean(process.env.OPENAI_API_KEY);
 
 /** Latest frame from the claimant's camera, encoded to JPEG only when a capture is requested. */
 class CameraTap {
@@ -118,21 +112,11 @@ class ClaimAgent extends voice.Agent {
 
   /** Tell the model about app state without putting words in the claimant's mouth. */
   async notifyAppState(notice: string) {
-    if (useGptLive()) {
-      const duplex = this.duplexSession as unknown as { appendInstructions?: (text: string) => void };
-      duplex.appendInstructions?.(notice);
-      return;
-    }
     await this.updateInstructions(`${this.baseInstructions}\n\n${notice}\n${referenceClock()}`);
   }
 
   /** Add background facts the model should know, without prompting it to speak. */
   async addSilentContext(text: string) {
-    if (useGptLive()) {
-      const duplex = this.duplexSession as unknown as { appendThinking?: (text: string) => void };
-      duplex.appendThinking?.(text);
-      return;
-    }
     const chatCtx = this.chatCtx.copy();
     chatCtx.addMessage({ role: 'system', content: text });
     await this.updateChatCtx(chatCtx);
@@ -258,7 +242,7 @@ function buildTools(
     parameters: z.object({
       policy_number: z
         .string()
-        .describe('Policy number exactly as the claimant said it, for example H0-44721 or AUTO 90210.'),
+        .describe('Policy number exactly as the claimant said it, for example 44721 or AUTO-123.'),
     }),
     execute: async (args, { toolCallId }) =>
       run(
@@ -383,10 +367,7 @@ export default defineAgent({
     let updates!: ClaimUpdates;
     const toolset = buildTools(intake, () => session, () => updates);
 
-    const gptLive = useGptLive();
-    const baseInstructions = gptLive
-      ? VOICE_INSTRUCTIONS
-      : `${VOICE_INSTRUCTIONS}\n\nTools:\n${TOOL_INSTRUCTIONS}`;
+    const baseInstructions = `${VOICE_INSTRUCTIONS}\n\nTools:\n${TOOL_INSTRUCTIONS}`;
     const agent = new ClaimAgent(intake, {
       baseInstructions,
       instructions: `${baseInstructions}\n\n${cameraModeNotice(false)}\n${referenceClock()}`,
@@ -394,27 +375,12 @@ export default defineAgent({
     });
     updates = new ClaimUpdates(intake, agent, () => session, (message) => pushEvent({ type: 'error', message }));
 
-    if (gptLive) {
-      intake.liveModel = `OpenAI ${VOICE_MODEL}`;
-      session = new voice.AgentSession({
-        llm: new openai.realtime.GPTLiveModel({
-          model: VOICE_MODEL,
-          voice: VOICE,
-          responsesOptions: {
-            model: BACKEND_MODEL,
-            instructions: `${TOOL_INSTRUCTIONS}\n${referenceClock()}`,
-          },
-        }),
-      });
-    } else {
-      console.warn('[agent] OPENAI_API_KEY is not set; using the LiveKit Inference voice pipeline instead of GPT-Live.');
-      intake.liveModel = `LiveKit Inference ${STT_MODEL} + ${FALLBACK_LLM} + ${TTS_MODEL}`;
-      session = new voice.AgentSession({
-        stt: STT_MODEL,
-        llm: FALLBACK_LLM,
-        tts: TTS_VOICE ? `${TTS_MODEL}:${TTS_VOICE}` : TTS_MODEL,
-      });
-    }
+    intake.liveModel = `OpenAI ${STT_MODEL} + ${LLM_MODEL} + ${TTS_MODEL}`;
+    session = new voice.AgentSession({
+      stt: new openai.STT({ model: STT_MODEL, detectLanguage: true }),
+      llm: new openai.LLM({ model: LLM_MODEL }),
+      tts: new openai.TTS({ model: TTS_MODEL, voice: VOICE }),
+    });
 
     // Final conversation turns feed the notebook and, for the claimant, the claim team.
     session.on(voice.AgentSessionEventTypes.ConversationItemAdded, (event) => {
